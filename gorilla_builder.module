@@ -1,0 +1,145 @@
+<?php
+
+/**
+ * Gorilla Builder is a Drupal specific implementation of the Mailchimp API
+ * It provides a set of ready to go functions and hooks for you to use in your
+ * own Mailchimp module. Gorilla Builder also handles errors.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function gorilla_builder_menu() {
+  $items = array();
+
+  $items['admin/settings/gorilla'] = array(
+    'title' => 'Gorilla Builder',
+    'description' => 'Manage Gorilla API settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('gorilla_general_settings'),
+    'access arguments' => array('administer gorilla builder'),
+    'access callback' => TRUE,
+    'file' => 'gorilla.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * A factory function returning an instance of type MCAPI
+ * @param reset
+ *  Set to TRUE if you want to reset the cache
+ * @return cache
+ *  The cached mcapi instance you want ot (re)use
+ */
+function _gorilla_factory($reset = FALSE) {
+  static $cache;
+  
+  module_load_include('inc', 'gorilla_builder', 'MCAPI.class');
+  module_load_include('inc', 'gorilla_builder', 'Gorilla.class');
+  
+  if ((!$cache) || $reset) {    
+    $api_key = variable_get('gorilla_api_key', '');
+    $mcapi = new Gorilla($api_key);
+    $cache = $mcapi;
+  }
+  
+  return $cache;
+}
+
+/**
+ * Creates a new campaign
+ * @param title
+ *  The title you want to use in the newsletter
+ * @param subject
+ *  The subject of the mail
+ * @param content
+ *  A structured array with the rendered content
+ * @param template_id
+ *  The id of the template you want to use
+ * @return
+ *  The cid of the newly created Mailchimp campaign. FALSE if an error occurs.
+ */
+function gorilla_create_campaign($title, $subject, $content, $template_id) {
+  try {
+   $mcapi = _gorilla_factory();
+
+   // the Campaign Type to create - one of "regular", "plaintext", "absplit", "rss", "trans", "auto"
+   $type = 'regular';
+
+   // options
+   $opts['list_id'] = variable_get('gorilla_list_id', '');
+   $opts['subject'] = $subject;
+   $opts['from_email'] = variable_get('gorilla_from_email', '');
+   $opts['from_name'] = variable_get('gorilla_from_name', '');
+   $opts['tracking'] = array(
+     'opens' => variable_get('gorilla_tracking_opens', ''),
+     'html_clicks' => variable_get('gorilla_tracking_html_clicks', ''),
+     'text_clicks' => variable_get('gorilla_tracking_text_clicks', ''),
+   );
+   $opts['authenticate'] = variable_get('gorilla_authenticate', '');
+   $opts['title'] = $title;
+   $opts['template_id'] = $template_id;
+
+   $cid = $mcapi->create_campaign($type, $opts, $content);
+   
+   watchdog('ebl_newsletter', 'A new campaign for %date was successfully created with Mailchimp and got cid %cid', array('%cid' => $cid));
+   return $cid;
+  } catch (Exception $e) {
+    watchdog('ebl_newsletter', 'We failed to create a new campaign: %error', array('%error' => $e->getMessage()), WATCHDOG_ERROR);
+  }
+  return FALSE;
+}
+
+function gorilla_list_interest_groups() {
+  try {
+   $mcapi = _ebl_newsletter_factory();
+   $lid = variable_get('gorilla_list_id', '');
+   return $mcapi->list_interesting_groups($lid);
+  } catch (Exception $e) {
+    // nobody cares
+  }
+}
+
+/**
+ * Fetch all campaign templates defined for you your account (API key)
+ * @param tid
+ *  A specific template id if you want to fetch the data of a specific template
+ * @return array
+ *  A structured array containing data of either a single template, or an array of templates
+ *  returns false if it throws an error
+ */
+function gorilla_campaign_templates($tid = NULL) {
+  $templates = array();
+
+  try {
+   $mcapi = _gorilla_factory();
+   $templates = $mcapi->campaign_templates();
+  } catch (Exception $e) {
+    // nobody cares
+  }
+
+  if ($tid) {
+    foreach ($templates as $template) {
+      if ($template['id'] == $tid) {
+        return $template;
+      }
+    }
+  }
+  
+  return $templates;  
+}
+
+/**
+ * Sends the campaign away. This function only works after ebl_newsletter_create_campaign()
+ * @return TRUE if success. FALSE if you didn't create a campaign first. Throws an exception if an error occurs.
+ */
+function gorilla_send_campaign($cid = NULL) {
+  try {
+    $mcapi = _gorilla_factory();
+    return $mcapi->send_campaign_now($cid);
+  } catch (Exception $e) {
+    watchdog('ebl_newsletter', 'We failed to send the campaign with id %cid: %error', array('%cid' => $mcapi->get_current_cid(), '%error' => $e->getMessage()), WATCHDOG_ERROR);
+  }
+  return FALSE;
+}

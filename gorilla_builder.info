@@ -1,0 +1,4 @@
+name = Gorilla Builder
+description = Build MailChimp Campaigns. Gorilla style.
+core = 6.x
+package = Mailchimp
