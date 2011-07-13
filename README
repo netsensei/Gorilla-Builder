@@ -1,0 +1,33 @@
+Gorilla Builder
+Matthias 'netsensei' Vandermaesen
+matthias.vandermaesen@krimson.be
+
+This module brings a flexible API to Drupal to facilitate Mailchimp development.
+It's build on top of the MCAPI PHP class. It features a set of functions you can 
+use in your own module. The API features error handling, watchdog integration and
+a limited UI.
+
+Why?
+
+One day, I had to push content from Drupal to MC. Rather then sending plain nodes or
+importing from an URL, I had to aggregate content embedded with MC's smart tags. There
+were no modules out there able to do that so I had to build it myself. I realized that a
+lot of stuff I've build were monkeyjobs I would probably have to redo at some point. I split 
+them off into Gorilla Builder. So, don't be a monkey and start using this in your MC projects.
+
+Roadmap?
+
+I conceived this in a spur of a moment thing. No real battle plans so far. Other then
+getting the stuff I need up and running. The big idea is to build a core API module and
+spawn a few side modules from there. 
+
+Suggestions so far:
+
+* A pluggable content/template integrator
+* Managing cronjobs
+* Rules integration
+* ...
+
+How to use?
+
+This is really, really unstable code. Barely ready to toy around. Beware!
