@@ -2,8 +2,10 @@
 
 /**
  * Gorilla Builder is a Drupal specific implementation of the Mailchimp API
- * It provides a set of ready to go functions and hooks for you to use in your
+ * It provides a toolbox with ready to go functions and hooks for you to use in your
  * own Mailchimp module. Gorilla Builder also handles errors.
+ * 
+ * This is something very 
  */
 
 /**
@@ -26,10 +28,21 @@ function gorilla_builder_menu() {
 }
 
 /**
- * A factory function returning an instance of type MCAPI
+ * Implements hook_help().
+ */
+function gorilla_builder_help($path, $arg) {
+  switch ($path) {
+    case 'admin/settings/gorilla' :
+    case 'admin/help#gorilla_builder' :
+      return '<p>'. t('Gorilla Builder is a Mailchimp toolbox for Drupal developers.') .'</p>';
+  }
+}
+
+/**
+ * A factory function returning a cached instance of type Gorilla
  * @param reset
  *  Set to TRUE if you want to reset the cache
- * @return cache
+ * @return Gorilla
  *  The cached mcapi instance you want ot (re)use
  */
 function _gorilla_factory($reset = FALSE) {
@@ -37,14 +50,61 @@ function _gorilla_factory($reset = FALSE) {
   
   module_load_include('inc', 'gorilla_builder', 'MCAPI.class');
   module_load_include('inc', 'gorilla_builder', 'Gorilla.class');
+  module_load_include('inc', 'gorilla_builder', 'GorillaException.class');
   
-  if ((!$cache) || $reset) {    
+  if ((!$cache) || $reset) {
     $api_key = variable_get('gorilla_api_key', '');
-    $mcapi = new Gorilla($api_key);
-    $cache = $mcapi;
+    $gorilla = new Gorilla($api_key);
+    $cache = $gorilla;
   }
   
   return $cache;
+}
+
+/**
+ * Gets you an instance of GorillaCampaign.
+ * @return GorillaCampaign
+ */
+function gorilla_get_new_campaign() {
+  module_load_include('inc', 'gorilla_builder', 'GorillaException.class');
+  module_load_include('inc', 'gorilla_builder', 'GorillaCampaign.class');
+  
+  $campaign = new GorillaCampaign();
+  return $campaign;
+}
+
+/**
+ * Returns a list of all lists associated with your account. Or a singe list
+ * if you specify its' list ID
+ * @param integer $lid (optional)
+ *   The list id
+ * @return mixed
+ *   A structured array or FALSE if an error was thrown
+ */
+function gorilla_list_lists($lid) {
+  $lists = array();
+
+  try {
+   $gorilla = _gorilla_factory();
+   $lists = $gorilla->lists();
+  } catch (GorillaException $e) {
+    $vars = array(
+      'errorcode' => $e->getErrorCode(),
+      'errormsg' => $e->getErrorMessage(),
+    );
+    watchdog('gorilla_builder', 'We failed to retrieve a list of available lists for your account: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);;
+    return FALSE;
+  }
+
+  if ($lid) {
+    foreach ($lists as $list) {
+      if ($list['id'] == $lid) {
+        return $list;
+      }
+    }
+  }
+  
+  return $lists;
 }
 
 /**
@@ -60,44 +120,45 @@ function _gorilla_factory($reset = FALSE) {
  * @return
  *  The cid of the newly created Mailchimp campaign. FALSE if an error occurs.
  */
-function gorilla_create_campaign($title, $subject, $content, $template_id) {
+function gorilla_create_campaign(GorillaCampaign $campaign) {
   try {
-   $mcapi = _gorilla_factory();
-
-   // the Campaign Type to create - one of "regular", "plaintext", "absplit", "rss", "trans", "auto"
-   $type = 'regular';
-
-   // options
-   $opts['list_id'] = variable_get('gorilla_list_id', '');
-   $opts['subject'] = $subject;
-   $opts['from_email'] = variable_get('gorilla_from_email', '');
-   $opts['from_name'] = variable_get('gorilla_from_name', '');
-   $opts['tracking'] = array(
-     'opens' => variable_get('gorilla_tracking_opens', ''),
-     'html_clicks' => variable_get('gorilla_tracking_html_clicks', ''),
-     'text_clicks' => variable_get('gorilla_tracking_text_clicks', ''),
-   );
-   $opts['authenticate'] = variable_get('gorilla_authenticate', '');
-   $opts['title'] = $title;
-   $opts['template_id'] = $template_id;
-
-   $cid = $mcapi->create_campaign($type, $opts, $content);
+   $gorilla = _gorilla_factory();
+ 
+   // hook_gorilla_campaign(&$campaign)
+   drupal_alter('gorilla_campaign', $campaign);
    
-   watchdog('ebl_newsletter', 'A new campaign for %date was successfully created with Mailchimp and got cid %cid', array('%cid' => $cid));
+   $cid = $gorilla->campaignCreate($campaign->type, $campaign->options, $campaign->content);
+
    return $cid;
-  } catch (Exception $e) {
-    watchdog('ebl_newsletter', 'We failed to create a new campaign: %error', array('%error' => $e->getMessage()), WATCHDOG_ERROR);
+  } catch (GorillaException $e) {
+    $vars = array(
+      'errorcode' => $e->getErrorCode(),
+      'errormsg' => $e->getErrorMessage(),
+    );
+    watchdog('gorilla_builder', 'We failed to create a new campaign: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);
   }
   return FALSE;
 }
 
-function gorilla_list_interest_groups() {
+/**
+ * Fetch a list of interest groups for a given list id
+ * @param lid
+ *  The list id
+ * @return array
+ *  A structured array of data about interests groups
+ *  FALSE if an error was thrown
+ */
+function gorilla_list_interest_groups($lid) {
   try {
-   $mcapi = _ebl_newsletter_factory();
-   $lid = variable_get('gorilla_list_id', '');
-   return $mcapi->list_interesting_groups($lid);
-  } catch (Exception $e) {
-    // nobody cares
+   $gorilla = _gorilla_factory();
+   return $gorilla->list_interesting_groups($lid);
+  } catch (GorillaException $e) {
+    $vars = array(
+      'lid' => $lid,
+      'errorcode' => $e->getErrorCode(),
+      'errormsg' => $e->getErrorMessage(),
+    );
+    watchdog('gorilla_builder', 'We failed to fetch the interests groups for id %lid: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);
   }
 }
 
@@ -113,10 +174,15 @@ function gorilla_campaign_templates($tid = NULL) {
   $templates = array();
 
   try {
-   $mcapi = _gorilla_factory();
-   $templates = $mcapi->campaign_templates();
-  } catch (Exception $e) {
-    // nobody cares
+   $gorilla = _gorilla_factory();
+   $templates = $gorilla->campaignTemplates();
+  } catch (GorillaException $e) {
+    $vars = array(
+      'errorcode' => $e->getErrorCode(),
+      'errormsg' => $e->getErrorMessage(),
+    );
+    watchdog('gorilla_builder', 'We failed to retrieve a list of available templates: %errormsg (%errorcode).', $vars, WATCHDOG_ERROR);;
+    return FALSE;
   }
 
   if ($tid) {
@@ -131,15 +197,20 @@ function gorilla_campaign_templates($tid = NULL) {
 }
 
 /**
- * Sends the campaign away. This function only works after ebl_newsletter_create_campaign()
+ * Sends the campaign away. This function only works after gorilla_create_campaign()
  * @return TRUE if success. FALSE if you didn't create a campaign first. Throws an exception if an error occurs.
  */
 function gorilla_send_campaign($cid = NULL) {
   try {
-    $mcapi = _gorilla_factory();
-    return $mcapi->send_campaign_now($cid);
-  } catch (Exception $e) {
-    watchdog('ebl_newsletter', 'We failed to send the campaign with id %cid: %error', array('%cid' => $mcapi->get_current_cid(), '%error' => $e->getMessage()), WATCHDOG_ERROR);
+    $gorilla = _gorilla_factory();
+    return $gorilla->campaignSendNow($cid);
+  } catch (GorillaException $e) {
+    $vars = array(
+      'cid' => $cid,
+      'errorcode' => $e->getErrorCode(),
+      'errormsg' => $e->getErrorMessage(),
+    );
+    watchdog('gorilla_builder', 'We failed to send the campaign with id %cid: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);
   }
   return FALSE;
 }
