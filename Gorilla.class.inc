@@ -1,87 +1,100 @@
 <?php
 
-class Gorilla {
-  
-  private $mcapi;
-  private $api_key;
-  private $current_cid = NULL;
+class Gorilla extends MCAPI {
   
   /**
-   * Constructor
-   * @param api_key
-   *  The API key from Mailchimp.
-   */ 
-  function __construct($api_key) {
-    $this->mcapi = new MCAPI($api_key);
-  }
- 
- /**
-  * Create a new campaign
-  */
-  function create_campaign($type, $options, $content, $segment_opts = NULL, $type_opts = NULL) {
-    $params = array(
-      'type' => $type,
-      'options' => $options,
-      'content' => $content,
-      'segment_opts' => $segment_opts,
-      'type_opts' => $type_opts,
-    );
+   * This function overrides the callServer method of the MCAPI class. We did 
+   * this to add exception handling.
+   * 
+   * @param string $method
+   * @param array $params
+   * @return mixed
+   */
+  function callServer($method, $params) {
+    $dc = "us1";
     
-    $this->current_cid = $this->call('campaignCreate', $params);
-
-    return $this->current_cid;
-  }
-
-  /**
-   * Send the campaign. No scheduling or delaying. Just shoves it right out of the door.
-   * You'll need to create a campaign before you can send it.
-   */
-  function send_campaign_now($cid = NULL) {
-    $params = array(
-      'cid' => ($cid) ? $cid : $this->current_cid,
-    );
-
-    return $this->call('campaignSendNow', $params);
-  }
-  
-  /**
-   * Get the active campaign id
-   * @return integer
-   *  The active campaign identifier
-   */
-  function get_current_cid() {
-    return $this->current_cid;
-  }
-  
-  function list_interesting_groups($lid) {
-    $params = array(
-      'id' => $lid,
-    );
-    return $this->call('listInterestGroupings', $params);    
-  }
-  
-  /**
-   * Gets a list of all available templates
-   * @return array
-   *  A structured array of all available templates
-   */
-  function campaign_templates() {
-    $params = array();
-    return $this->call('campaignTemplates', $params);
-  }
-
-  /**
-   * Makes the API call to the MCAPI class. Just adds exception error handling
-   */
-  private function call($call, $params = array()) {
-    if (method_exists($this->mcapi, $call)) {
-      $result = call_user_func_array(array($this->mcapi, $call), $params);
+    if (strstr($this->api_key,"-")) {
+      list($key, $dc) = explode("-",$this->api_key,2);
       
-      if ($this->mcapi->errorCode) {
-        throw new Exception("Error: " . $mcapi->errorCode . " :: " . $mcapi->errorMessage); 
-      }
-
-      return $result;
+      if (!$dc) $dc = "us1";
     }
+    
+    $host = $dc.".".$this->apiUrl["host"];
+    $params["apikey"] = $this->api_key;
+
+    $this->errorMessage = "";
+    $this->errorCode = "";
+    
+    $post_vars = $this->httpBuildQuery($params);
+
+    $payload = "POST " . $this->apiUrl["path"] . "?" . $this->apiUrl["query"] . "&method=" . $method . " HTTP/1.0\r\n";
+    $payload .= "Host: " . $host . "\r\n";
+    $payload .= "User-Agent: MCAPI/" . $this->version ."\r\n";
+    $payload .= "Content-type: application/x-www-form-urlencoded\r\n";
+    $payload .= "Content-length: " . strlen($post_vars) . "\r\n";
+    $payload .= "Connection: close \r\n\r\n";
+    $payload .= $post_vars;
+
+    ob_start();
+    if ($this->secure){
+      $sock = @fsockopen("ssl://".$host, 443, $errno, $errstr, 30);
+    } else {
+      $sock = @fsockopen($host, 80, $errno, $errstr, 30);
+    }
+    
+    if (!$sock) {
+      $this->errorMessage = "Could not connect (ERR $errno: $errstr)";
+      $this->errorCode = "-99";
+      ob_end_clean();
+      throw new GorillaException($this->errorCode, $this->errorMessage);
+    }
+
+    $response = "";
+    fwrite($sock, $payload);
+    stream_set_timeout($sock, $this->timeout);
+    $info = stream_get_meta_data($sock);
+    
+    while ((!feof($sock)) && (!$info["timed_out"])) {
+      $response .= fread($sock, $this->chunkSize);
+      $info = stream_get_meta_data($sock);
+    }
+    
+    if ($info["timed_out"]) {
+      $this->errorMessage = "Could not read response (timed out)";
+      $this->errorCode = -98;
+    }
+    
+    fclose($sock);
+    ob_end_clean();
+    
+    if ($info["timed_out"]) {
+      throw new GorillaException($this->errorCode, $this->errorMessage);
+    }
+
+    list($throw, $response) = explode("\r\n\r\n", $response, 2);
+
+    if (ini_get("magic_quotes_runtime")) $response = stripslashes($response);
+
+    $serial = unserialize($response);
+    
+    if ($response && $serial === false) {
+      $response = array("error" => "Bad Response.  Got This: " . $response, "code" => "-99");
+    } else {
+      $response = $serial;
+    }
+    
+    if (is_array($response) && isset($response["error"])) {
+      $this->errorMessage = $response["error"];
+      $this->errorCode = $response["code"];
+      throw new GorillaException($this->errorCode, $this->errorMessage);
+    }
+
+    return $response;   
+    
+    if ($this->errorCode) {
+      throw new GorillaException($this->errorCode, $this->errorMessage);
+    }
+    
+    return $response;
   }
 }
