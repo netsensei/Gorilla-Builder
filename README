@@ -21,6 +21,13 @@ I conceived this in a spur of a moment thing. No real battle plans so far. Other
 getting the stuff I need up and running. The big idea is to build a core API module and
 spawn a few side modules from there. 
 
+Todo's:
+
+* Writing tests
+* Extend the API to a flexible framework: GorillaCampaign, GorillaList,... classes
+* Views integration
+* Documentation
+
 Suggestions so far:
 
 * A pluggable content/template integrator
