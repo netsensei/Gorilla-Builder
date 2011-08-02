@@ -1,5 +1,8 @@
 <?php
 
+/**
+ *  Implements the Mailchimp API. Extends MCAPI to add better error handling.
+ */
 class Gorilla extends MCAPI {
   
   /**
@@ -46,7 +49,7 @@ class Gorilla extends MCAPI {
       $this->errorMessage = "Could not connect (ERR $errno: $errstr)";
       $this->errorCode = "-99";
       ob_end_clean();
-      throw new GorillaException($this->errorCode, $this->errorMessage);
+      throw new GorillaConnectionException($this->errorMessage, $this->errorCode);
     }
 
     $response = "";
@@ -68,7 +71,7 @@ class Gorilla extends MCAPI {
     ob_end_clean();
     
     if ($info["timed_out"]) {
-      throw new GorillaException($this->errorCode, $this->errorMessage);
+      throw new GorillaTimeoutException($this->errorMessage, $this->errorCode);
     }
 
     list($throw, $response) = explode("\r\n\r\n", $response, 2);
@@ -86,15 +89,9 @@ class Gorilla extends MCAPI {
     if (is_array($response) && isset($response["error"])) {
       $this->errorMessage = $response["error"];
       $this->errorCode = $response["code"];
-      throw new GorillaException($this->errorCode, $this->errorMessage);
+      throw new GorillaBadresponseException($this->errorMessage, $this->errorCode);
     }
 
-    return $response;   
-    
-    if ($this->errorCode) {
-      throw new GorillaException($this->errorCode, $this->errorMessage);
-    }
-    
     return $response;
   }
 }

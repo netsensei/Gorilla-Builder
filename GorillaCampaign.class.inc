@@ -1,5 +1,8 @@
 <?php
 
+/**
+ * This class represents a campaign in mailchimp
+ */
 class GorillaCampaign {
   var $list_id;
   var $title;
@@ -19,10 +22,11 @@ class GorillaCampaign {
   
   function __set($var, $value) {
     if (!isset($this->{$var})) {
-      throw new GorillaException(-66, t('The variable %var does not exist', array('%var' => $var)));
-    } else {
-      $this->{$var} = $value;
+      $error = t('The variable %var does not exist', array('%var' => $var));
+      trigger_error($error, E_USER_ERROR);
     }
+    
+    $this->{$var} = $value;
   }
   
   function __get($var) {
@@ -36,7 +40,8 @@ class GorillaCampaign {
   
   private function getVar($var) {
     if (!isset($this->{$var})) {
-      throw new GorillaException(-66, t('The variable %var does not exist', array('%var' => $var)));
+      $error = t('The variable %var does not exist', array('%var' => $var));
+      trigger_error($error, E_USER_ERROR);
     }
  
     return $this->{$var};    

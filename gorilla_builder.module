@@ -50,7 +50,7 @@ function _gorilla_factory($reset = FALSE) {
   
   module_load_include('inc', 'gorilla_builder', 'MCAPI.class');
   module_load_include('inc', 'gorilla_builder', 'Gorilla.class');
-  module_load_include('inc', 'gorilla_builder', 'GorillaException.class');
+  module_load_include('inc', 'gorilla_builder', 'exceptions');
   
   if ((!$cache) || $reset) {
     $api_key = variable_get('gorilla_api_key', '');
@@ -66,7 +66,7 @@ function _gorilla_factory($reset = FALSE) {
  * @return GorillaCampaign
  */
 function gorilla_get_new_campaign() {
-  module_load_include('inc', 'gorilla_builder', 'GorillaException.class');
+  module_load_include('inc', 'gorilla_builder', 'exceptions');
   module_load_include('inc', 'gorilla_builder', 'GorillaCampaign.class');
   
   $campaign = new GorillaCampaign();
@@ -87,12 +87,9 @@ function gorilla_list_lists($lid) {
   try {
    $gorilla = _gorilla_factory();
    $lists = $gorilla->lists();
-  } catch (GorillaException $e) {
-    $vars = array(
-      'errorcode' => $e->getErrorCode(),
-      'errormsg' => $e->getErrorMessage(),
-    );
-    watchdog('gorilla_builder', 'We failed to retrieve a list of available lists for your account: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);;
+  } catch (Exception $e) {
+    watchdog('gorilla_builder', 'We could not fetch a list of lists', array(), WATCHDOG_ERROR);
+    drupal_set_message($e);
     return FALSE;
   }
 
@@ -130,12 +127,8 @@ function gorilla_create_campaign(GorillaCampaign $campaign) {
    $cid = $gorilla->campaignCreate($campaign->type, $campaign->options, $campaign->content);
 
    return $cid;
-  } catch (GorillaException $e) {
-    $vars = array(
-      'errorcode' => $e->getErrorCode(),
-      'errormsg' => $e->getErrorMessage(),
-    );
-    watchdog('gorilla_builder', 'We failed to create a new campaign: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);
+  } catch (Exception $e) {
+    drupal_set_message($e);
   }
   return FALSE;
 }
@@ -152,13 +145,10 @@ function gorilla_list_interest_groups($lid) {
   try {
    $gorilla = _gorilla_factory();
    return $gorilla->list_interesting_groups($lid);
-  } catch (GorillaException $e) {
-    $vars = array(
-      'lid' => $lid,
-      'errorcode' => $e->getErrorCode(),
-      'errormsg' => $e->getErrorMessage(),
-    );
-    watchdog('gorilla_builder', 'We failed to fetch the interests groups for id %lid: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);
+  } catch (Exception $e) {
+    $vars = array('%lid' => $lid);
+    watchdog('gorilla_builder', 'Could not fetch a list of interest groups for %lid', $vars, WATCHDOG_ERROR);
+    drupal_set_message($e);
   }
 }
 
@@ -176,12 +166,8 @@ function gorilla_campaign_templates($tid = NULL) {
   try {
    $gorilla = _gorilla_factory();
    $templates = $gorilla->campaignTemplates();
-  } catch (GorillaException $e) {
-    $vars = array(
-      'errorcode' => $e->getErrorCode(),
-      'errormsg' => $e->getErrorMessage(),
-    );
-    watchdog('gorilla_builder', 'We failed to retrieve a list of available templates: %errormsg (%errorcode).', $vars, WATCHDOG_ERROR);;
+  } catch (Exception $e) {
+    drupal_set_message($e);
     return FALSE;
   }
 
@@ -204,13 +190,10 @@ function gorilla_send_campaign($cid = NULL) {
   try {
     $gorilla = _gorilla_factory();
     return $gorilla->campaignSendNow($cid);
-  } catch (GorillaException $e) {
-    $vars = array(
-      'cid' => $cid,
-      'errorcode' => $e->getErrorCode(),
-      'errormsg' => $e->getErrorMessage(),
-    );
-    watchdog('gorilla_builder', 'We failed to send the campaign with id %cid: %errormsg (%errorcode)', $vars, WATCHDOG_ERROR);
+  } catch (Exception $e) {
+    $vars = array('%cid' => $cid);
+    watchdog('gorilla_builder', 'We could not send a campagin for %cid', $vars, WATCHDOG_ERROR);
+    drupal_set_message($e);
   }
   return FALSE;
 }
